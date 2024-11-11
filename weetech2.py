@@ -1,6 +1,5 @@
 import csv
 import time
-import re
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -48,37 +47,42 @@ with open("scraped_blogs.csv", "w", newline='', encoding='utf-8') as file:
                 print(f"{title.text} - {text.text}")
                 writer.writerow([title.text, text.text])
 
-            # Check for the "Older Posts" link and the "Previous" link
+            # Try to find and click the "Older Posts" link if present
             try:
-                # Check if the "Older Posts" link exists, which indicates there is a next page
+                # Locate the "Older Posts" button
                 next_button = WebDriverWait(page_to_scrape, 10).until(
                     EC.presence_of_element_located((By.XPATH, "//a[contains(@href, 'blog/page/')]"))
                 )
 
+                # Check if the URL is already on the last page
+                current_url = page_to_scrape.current_url
+                print(f"Current URL before clicking: {current_url}")
+
                 # Scroll to the "Older Posts" button to make sure it's in view
                 page_to_scrape.execute_script("arguments[0].scrollIntoView(true);", next_button)
 
-                # Retry clicking if the first attempt fails (e.g., element might be covered)
-                try:
-                    page_to_scrape.execute_script("arguments[0].click();", next_button)
-                    print("Found 'Older Posts' button, clicking it.")
+                # Wait for the button to be clickable
+                WebDriverWait(page_to_scrape, 10).until(EC.element_to_be_clickable(next_button))
 
-                    # Wait for the page to load after clicking
-                    WebDriverWait(page_to_scrape, 10).until(EC.url_changes(page_to_scrape.current_url))
-                    time.sleep(2)  # Allow for some time after page load
+                # Ensure that no other element is blocking the button (handle possible overlays)
+                page_to_scrape.execute_script("arguments[0].click();", next_button)
+                print("Found 'Older Posts' button, clicking it.")
 
-                    # Increment page count
-                    page_count += 1
-                except ElementClickInterceptedException:
-                    print("Element not clickable. Trying again after a delay.")
-                    time.sleep(2)  # Wait a little before trying again
-                    next_button = page_to_scrape.find_element(By.XPATH, "//a[contains(@href, 'blog/page/')]")
-                    page_to_scrape.execute_script("arguments[0].click();", next_button)
-                    WebDriverWait(page_to_scrape, 10).until(EC.url_changes(page_to_scrape.current_url))
-                    time.sleep(2)
+                # Wait for the page to load after clicking (make sure the URL changes)
+                WebDriverWait(page_to_scrape, 10).until(EC.url_changes(current_url))
+
+                # Print the URL after clicking to check if it has changed
+                new_url = page_to_scrape.current_url
+                print(f"New URL after clicking: {new_url}")
+
+                # Wait for the page to load fully before scraping again
+                time.sleep(3)
+
+                # Increment page count
+                page_count += 1
 
             except (NoSuchElementException, TimeoutException, ElementClickInterceptedException) as e:
-                print(f"Error encountered: {e}. No more pages to scrape.")
+                print(f"No more pages to scrape or error encountered: {e}")
                 break  # Break the loop if there's no "Older Posts" button or it's not clickable
 
         except TimeoutException:
